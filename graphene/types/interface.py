@@ -24,7 +24,7 @@ class Interface(BaseType):
     when the field is resolved.
     '''
     @classmethod
-    def __init_subclass_with_meta__(cls, _meta=None, **options):
+    def __init_subclass_with_meta__(cls, type_resolver=None, _meta=None, **options):
         if not _meta:
             _meta = InterfaceOptions(cls)
 
@@ -39,10 +39,19 @@ class Interface(BaseType):
         else:
             _meta.fields = fields
 
+        _meta.type_resolver = type_resolver
+
         super(Interface, cls).__init_subclass_with_meta__(_meta=_meta, **options)
 
     @classmethod
     def resolve_type(cls, instance, info):
+        if cls._meta.type_resolver:
+            type_resolver = cls._meta.type_resolver
+            assert callable(type_resolver), (
+                '`resolve_type` option for interface has to be callable. Instead received "{}".'
+            ).format(type_resolver)
+            return type_resolver(instance, info)
+
         from .objecttype import ObjectType
         if isinstance(instance, ObjectType):
             return type(instance)

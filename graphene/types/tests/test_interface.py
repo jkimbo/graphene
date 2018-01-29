@@ -1,6 +1,9 @@
 from ..field import Field
 from ..interface import Interface
+from ..objecttype import ObjectType
 from ..unmountedtype import UnmountedType
+from ..scalars import String
+from ..schema import Schema
 
 
 class MyType(object):
@@ -90,3 +93,55 @@ def test_generate_interface_inherit_abstracttype_reversed():
 
     assert list(MyInterface._meta.fields.keys()) == ['field1', 'field2']
     assert [type(x) for x in MyInterface._meta.fields.values()] == [Field, Field]
+
+
+def test_allow_custom_resolve_type_func():
+    def character_type_resolver(instance, info):
+        if instance['type'] == 'Human':
+            return Human
+        if instance['type'] == 'Droid':
+            return Droid
+        raise NotImplementedError('Unrecognised type')
+
+    class Character(Interface):
+        class Meta:
+            type_resolver = character_type_resolver
+
+        name = String()
+
+        def resolve_name(root, info):
+            return root['name']
+
+    class Human(ObjectType):
+        class Meta:
+            interfaces = (Character,)
+
+    class Droid(ObjectType):
+        class Meta:
+            interfaces = (Character,)
+
+    class Query(ObjectType):
+        main_character = Field(Character)
+
+        def resolve_main_character(self, info):
+            return {
+                'type': 'Human',
+                'name': 'Luke Skywalker',
+            }
+
+    schema = Schema(query=Query, types=[
+        Human,
+        Droid,
+    ])
+    result = schema.execute(''' query basequery {
+        mainCharacter {
+            name
+        }
+    }
+    ''')
+    assert not result.errors
+    assert result.data == {
+        'mainCharacter': {
+            'name': 'Luke Skywalker',
+        }
+    }
