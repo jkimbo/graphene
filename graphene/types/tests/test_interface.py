@@ -99,8 +99,6 @@ def test_allow_custom_resolve_type_func():
     def character_type_resolver(instance, info):
         if instance['type'] == 'Human':
             return Human
-        if instance['type'] == 'Droid':
-            return Droid
         raise NotImplementedError('Unrecognised type')
 
     class Character(Interface):
@@ -116,10 +114,6 @@ def test_allow_custom_resolve_type_func():
         class Meta:
             interfaces = (Character,)
 
-    class Droid(ObjectType):
-        class Meta:
-            interfaces = (Character,)
-
     class Query(ObjectType):
         main_character = Field(Character)
 
@@ -131,7 +125,6 @@ def test_allow_custom_resolve_type_func():
 
     schema = Schema(query=Query, types=[
         Human,
-        Droid,
     ])
     result = schema.execute(''' query basequery {
         mainCharacter {
