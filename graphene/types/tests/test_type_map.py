@@ -1,3 +1,7 @@
+from textwrap import dedent
+
+import pytest
+from graphql import parse, build_ast_schema
 from graphql.type import (
     GraphQLArgument,
     GraphQLEnumType,
@@ -20,6 +24,7 @@ from ..objecttype import ObjectType
 from ..scalars import Int, String
 from ..structures import List, NonNull
 from ..schema import Schema
+from ..union import Union
 
 
 def create_type_map(types, auto_camelcase=True):
@@ -270,3 +275,157 @@ def test_objecttype_with_possible_types():
     assert graphql_type.is_type_of
     assert graphql_type.is_type_of({}, None) is True
     assert graphql_type.is_type_of(MyObjectType(), None) is False
+
+
+def test_graphql_type():
+    """Type map should allow direct GraphQL types"""
+    MyGraphQLType = GraphQLObjectType(
+        name="MyGraphQLType",
+        fields={
+            "hello": GraphQLField(GraphQLString, resolve=lambda obj, info: "world")
+        },
+    )
+
+    class Query(ObjectType):
+        graphql_type = Field(MyGraphQLType)
+
+        def resolve_graphql_type(root, info):
+            return {}
+
+    schema = Schema(query=Query)
+    assert str(schema) == dedent(
+        """\
+        type Query {
+          graphqlType: MyGraphQLType
+        }
+
+        type MyGraphQLType {
+          hello: String
+        }
+    """
+    )
+
+    results = schema.execute(
+        """
+        query {
+            graphqlType {
+                hello
+            }
+        }
+    """
+    )
+    assert not results.errors
+    assert results.data == {"graphqlType": {"hello": "world"}}
+
+
+def test_graphql_type_interface():
+    MyGraphQLInterface = GraphQLInterfaceType(
+        name="MyGraphQLType",
+        fields={
+            "hello": GraphQLField(GraphQLString, resolve=lambda obj, info: "world")
+        },
+    )
+
+    with pytest.raises(AssertionError) as error:
+
+        class MyGrapheneType(ObjectType):
+            class Meta:
+                interfaces = (MyGraphQLInterface,)
+
+    assert str(error.value) == (
+        "All interfaces of MyGrapheneType must be a subclass of Interface. "
+        'Received "MyGraphQLType".'
+    )
+
+
+def test_graphql_type_union():
+    MyGraphQLType = GraphQLObjectType(
+        name="MyGraphQLType",
+        fields={
+            "hello": GraphQLField(GraphQLString, resolve=lambda obj, info: "world")
+        },
+    )
+
+    class MyGrapheneType(ObjectType):
+        hi = String(default_value="world")
+
+    class MyUnion(Union):
+        class Meta:
+            types = (MyGraphQLType, MyGrapheneType)
+
+        @classmethod
+        def resolve_type(cls, instance, info):
+            return MyGraphQLType
+
+    class Query(ObjectType):
+        my_union = Field(MyUnion)
+
+        def resolve_my_union(root, info):
+            return {}
+
+    schema = Schema(query=Query)
+    assert str(schema) == dedent(
+        """\
+        type Query {
+          myUnion: MyUnion
+        }
+
+        union MyUnion = MyGraphQLType | MyGrapheneType
+
+        type MyGraphQLType {
+          hello: String
+        }
+
+        type MyGrapheneType {
+          hi: String
+        }
+    """
+    )
+
+    results = schema.execute(
+        """
+        query {
+            myUnion {
+                __typename
+            }
+        }
+    """
+    )
+    assert not results.errors
+    assert results.data == {"myUnion": {"__typename": "MyGraphQLType"}}
+
+
+def test_graphql_type_from_sdl():
+    types = """
+        type Pet {
+            name: String!
+        }
+
+        type User {
+            name: String!
+            pets: [Pet!]!
+        }
+    """
+    ast_document = parse(types)
+    sdl_schema = build_ast_schema(ast_document)
+
+    class Query(ObjectType):
+        my_user = Field(sdl_schema.get_type("User"))
+
+    schema = Schema(query=Query)
+    assert str(schema) == dedent(
+        """\
+        type Query {
+          myUser: User
+        }
+
+        type User {
+          name: String!
+          pets: [Pet!]!
+        }
+
+        type Pet {
+          name: String!
+        }
+    """
+    )
