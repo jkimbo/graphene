@@ -309,6 +309,8 @@ class TypeMap(dict):
                     out_name=name,
                     description=field.description,
                 )
+            elif isinstance(field, GraphQLField):
+                _field = field
             else:
                 args = {}
                 for arg_name, arg in field.args.items():
@@ -358,7 +360,7 @@ class TypeMap(dict):
                     deprecation_reason=field.deprecation_reason,
                     description=field.description,
                 )
-            field_name = field.name or self.get_name(name)
+            field_name = getattr(field, "name", None) or self.get_name(name)
             fields[field_name] = _field
         return fields
 

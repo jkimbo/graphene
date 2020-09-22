@@ -1,5 +1,6 @@
 import inspect
 from functools import partial
+from graphql import GraphQLField
 
 from ..utils.module_loading import import_string
 from .mountedtype import MountedType
@@ -16,9 +17,11 @@ def get_field_as(value, _as=None):
         if _as is None:
             return value
         return _as.mounted(value)
+    elif isinstance(value, GraphQLField):
+        return value
 
 
-def yank_fields_from_attrs(attrs, _as=None, sort=True):
+def yank_fields_from_attrs(attrs, _as=None, sort=False):
     """
     Extract all the fields in given attributes (dict)
     and return them ordered
@@ -31,7 +34,7 @@ def yank_fields_from_attrs(attrs, _as=None, sort=True):
         fields_with_names.append((attname, field))
 
     if sort:
-        fields_with_names = sorted(fields_with_names, key=lambda f: f[1])
+        fields_with_names = sorted(fields_with_names, key=lambda f: f[0])
     return dict(fields_with_names)
 
 
